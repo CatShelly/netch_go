@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Netch Go</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">SOCKS / RULES / REDIRECTOR</p>
+        <h1>Netch Go</h1>
+        <p class="hero-copy">配置 SOCKS 服务器与应用规则，一键启动进程强制代理。</p>
+      </div>
+      <div class="hero-actions">
+        <div id="sessionBadge" class="session-badge idle">未启动</div>
+        <div class="button-row">
+          <button id="startBtn" class="primary">启动</button>
+          <button id="stopBtn" class="danger">停止</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid-layout">
+      <section class="panel focus-panel">
+        <div class="panel-head">
+          <h2>当前会话</h2>
+          <span id="selectionHint" class="muted">请选择服务器和规则集</span>
+        </div>
+        <div class="quick-grid">
+          <label>
+            <span>SOCKS 服务器</span>
+            <select id="serverSelect"></select>
+          </label>
+          <label>
+            <span>规则集</span>
+            <select id="ruleSelect"></select>
+          </label>
+        </div>
+        <div id="sessionMessage" class="session-message"></div>
+      </section>
+
+      <div class="left-stack">
+        <section class="panel server-panel">
+          <div class="panel-head">
+            <h2>SOCKS 服务器</h2>
+            <button id="newServerBtn" class="ghost">新建</button>
+          </div>
+          <form id="serverForm" class="stack-form">
+            <input type="hidden" id="serverId" />
+            <label><span>名称</span><input id="serverName" placeholder="东京办公代理" /></label>
+            <div class="split-2">
+              <label><span>主机</span><input id="serverHost" placeholder="127.0.0.1" /></label>
+              <label><span>端口</span><input id="serverPort" type="number" placeholder="1080" /></label>
+            </div>
+            <div class="split-2">
+              <label><span>用户名</span><input id="serverUser" placeholder="可选" /></label>
+              <label><span>密码</span><input id="serverPass" placeholder="可选" /></label>
+            </div>
+            <div class="split-2">
+              <label><span>分组</span><input id="serverGroup" placeholder="Office" /></label>
+              <label><span>版本</span><input id="serverVersion" placeholder="5" value="5" /></label>
+            </div>
+            <label><span>备注</span><textarea id="serverNotes" rows="3" placeholder="给自己留点上下文，比如出口地区、可用业务。"></textarea></label>
+            <div class="button-row compact">
+              <button type="submit" class="primary">保存服务器</button>
+              <button type="button" id="resetServerBtn" class="ghost">清空</button>
+            </div>
+          </form>
+          <div id="serverList" class="list-stack"></div>
+        </section>
+
+        <section class="panel runtime-panel">
+          <div class="panel-head">
+            <h2>运行时检查</h2>
+            <span class="muted">Redirector / nfapi / 驱动</span>
+          </div>
+          <div id="assetList" class="asset-grid"></div>
+          <div class="button-row compact">
+            <button type="button" id="openRuntimeBtn" class="ghost">打开 runtime</button>
+            <button type="button" id="openDataBtn" class="ghost">打开 data</button>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel rule-panel">
+        <div class="panel-head">
+          <h2>规则集</h2>
+          <button id="newRuleBtn" class="ghost">新建</button>
+        </div>
+        <form id="ruleForm" class="stack-form">
+          <input type="hidden" id="ruleId" />
+          <label><span>名称</span><input id="ruleName" placeholder="Visual Studio Code" /></label>
+          <label><span>描述</span><input id="ruleDescription" placeholder="给未来的自己一个提示" /></label>
+          <div class="split-2">
+            <label><span>包含规则</span><textarea id="ruleInclude" rows="5" placeholder="Code.exe&#10;CodeHelper.exe"></textarea></label>
+            <label><span>绕过规则</span><textarea id="ruleExclude" rows="5" placeholder="!steam.exe"></textarea></label>
+          </div>
+          <label><span>域名规则</span><textarea id="ruleDomains" rows="4" placeholder=".example.com&#10;*.example.net&#10;example.org&#10;*example.io"></textarea></label>
+          <div class="rule-import-row">
+            <button type="button" id="scanRuleIncludeBtn" class="ghost">扫描文件夹 EXE 到包含规则</button>
+            <span class="muted">递归扫描所选目录，自动去重，最多导入 50 条</span>
+          </div>
+          <section class="settings-group" aria-label="redirector-group">
+            <div class="group-head">
+              <h3>进程重定向（Redirector）</h3>
+              <p id="processDnsHint" class="inline-hint">勾选“拦截 DNS”后，将启用进程 DNS 重定向。默认会同时处理命中规则进程和 Windows DNS Client(svchost)。</p>
+            </div>
+            <div class="check-grid">
+              <label class="check"><input id="proxyFilterTCP" type="checkbox" checked /><span>拦截 TCP</span></label>
+              <label class="check"><input id="proxyFilterUDP" type="checkbox" checked /><span>拦截 UDP</span></label>
+              <label class="check"><input id="proxyFilterDNS" type="checkbox" checked /><span>拦截 DNS</span></label>
+              <label class="check"><input id="proxyDnsOnly" type="checkbox" checked /><span>对DNS Client进行DNS处理</span></label>
+              <label class="check"><input id="proxyDnsDomainOnly" type="checkbox" /><span>DNS Client仅对命中域名规则进行DNS处理</span></label>
+              <label class="check"><input id="proxyDnsThrough" type="checkbox" /><span>DNS 请求走代理</span></label>
+              <label class="check"><input id="proxyFilterLoopback" type="checkbox" /><span>处理回环流量</span></label>
+              <label class="check"><input id="proxyFilterIntranet" type="checkbox" checked /><span>处理内网流量</span></label>
+              <label class="check"><input id="proxyFilterParent" type="checkbox" /><span>处理子进程</span></label>
+              <label class="check"><input id="proxyFilterICMP" type="checkbox" /><span>处理 ICMP</span></label>
+            </div>
+            <div class="split-2">
+              <label><span>重定向 DNS 目标</span><input id="proxyRemoteDns" placeholder="1.1.1.1:53" value="1.1.1.1:53" /></label>
+              <label><span>ICMP 延迟</span><input id="proxyICMPDelay" type="number" min="0" placeholder="10" value="10" /></label>
+            </div>
+          </section>
+          <div class="button-row compact">
+            <button type="submit" class="primary">保存规则集</button>
+            <button type="button" id="resetRuleBtn" class="ghost">清空</button>
+            <span id="ruleSaveStatus" class="inline-status" aria-live="polite"></span>
+          </div>
+        </form>
+        <div id="ruleList" class="list-stack"></div>
+      </section>
+
+      <section class="panel dns-watch-panel">
+        <div class="panel-head">
+          <h2>DNS Client 监听（ETW）</h2>
+          <span id="dnsWatchSummary" class="muted">未开启</span>
+        </div>
+        <div class="dns-watch-grid">
+          <div class="settings-group">
+            <label class="check">
+              <input id="dnsWatchToggle" type="checkbox" />
+              <span>开启 DNS Client 实时域名监听</span>
+            </label>
+            <p id="dnsWatchHint" class="inline-hint">开启时会先检查 ETW 通道、服务状态，再执行 flushdns 后开始抓取。</p>
+            <div id="dnsWatchStatus" class="session-message">未开启 DNS Client ETW 抓取</div>
+          </div>
+          <div class="settings-group">
+            <div class="panel-head">
+              <h3>实时域名</h3>
+              <span id="dnsWatchCount" class="muted">0 条</span>
+            </div>
+            <div id="dnsWatchList" class="list-stack dns-watch-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="panel-head">
+          <h2>日志</h2>
+          <span class="muted">最近 200 条</span>
+        </div>
+        <div id="logList" class="log-list"></div>
+      </section>
+    </main>
+  </div>
+  <div id="busyOverlay" class="busy-overlay" hidden>
+    <div class="busy-card">
+      <div class="spinner"></div>
+      <p id="busyText">请稍候...</p>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
+
+
