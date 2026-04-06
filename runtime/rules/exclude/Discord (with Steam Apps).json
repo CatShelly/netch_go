@@ -1,0 +1,12 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Discord (with Steam Apps)"
+  },
+  "description": "",
+  "handle": [
+    "Discord",
+    "\\\\steamapps\\\\"
+  ],
+  "bypass": []
+}

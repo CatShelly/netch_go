@@ -1,0 +1,16 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Nexon"
+  },
+  "description": "",
+  "handle": [
+    "NexonPlug.exe",
+    "NMService.exe",
+    "NGM.exe",
+    "NGCLIENT.AES",
+    "NGM64.exe",
+    "SIG.exe"
+  ],
+  "bypass": []
+}

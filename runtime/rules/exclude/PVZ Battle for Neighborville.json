@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "PVZ Battle for Neighborville"
+  },
+  "description": "",
+  "handle": [
+    "PVZ Battle for Neighborville"
+  ],
+  "bypass": []
+}

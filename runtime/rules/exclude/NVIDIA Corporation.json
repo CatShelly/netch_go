@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "NVIDIA Corporation"
+  },
+  "description": "",
+  "handle": [
+    "\\\\NVIDIA Corporation\\\\"
+  ],
+  "bypass": []
+}

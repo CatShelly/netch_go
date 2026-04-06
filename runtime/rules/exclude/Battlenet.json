@@ -1,0 +1,16 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Battle"
+  },
+  "description": "",
+  "handle": [
+    "Battle.net Launcher.exe",
+    "BlizzardError.exe",
+    "Loader64.exe",
+    "SystemSurvey.exe",
+    "Battle.net.exe",
+    "Agent.exe"
+  ],
+  "bypass": []
+}

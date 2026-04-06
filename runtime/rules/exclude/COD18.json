@@ -1,0 +1,12 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "COD18"
+  },
+  "description": "",
+  "handle": [
+    "\\\\Battlestate Games\\\\",
+    "\\\\Battle.net\\\\"
+  ],
+  "bypass": []
+}

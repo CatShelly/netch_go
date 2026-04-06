@@ -1,0 +1,13 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Global"
+  },
+  "description": "",
+  "handle": [
+    ".*"
+  ],
+  "bypass": [
+    "\\Netch\\"
+  ]
+}

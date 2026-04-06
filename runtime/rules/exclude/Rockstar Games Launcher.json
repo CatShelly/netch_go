@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Rockstar Games Launcher"
+  },
+  "description": "",
+  "handle": [
+    "\\\\Rockstar Games\\\\Launcher\\\\"
+  ],
+  "bypass": []
+}

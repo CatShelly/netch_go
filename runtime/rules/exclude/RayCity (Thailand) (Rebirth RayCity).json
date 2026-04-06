@@ -1,0 +1,12 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "RayCity (Thailand) (Rebirth RayCity)"
+  },
+  "description": "",
+  "handle": [
+    "\\\\Patcher.exe",
+    "RebirtRaycity.exe"
+  ],
+  "bypass": []
+}

@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Minecraft Bedrock (Win10 UWP)"
+  },
+  "description": "",
+  "handle": [
+    "Minecraft.Windows.exe"
+  ],
+  "bypass": []
+}

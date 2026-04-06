@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "VMware"
+  },
+  "description": "",
+  "handle": [
+    "vmnat.exe"
+  ],
+  "bypass": []
+}

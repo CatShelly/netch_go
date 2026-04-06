@@ -1,0 +1,16 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Visual Studio Code"
+  },
+  "description": "",
+  "handle": [
+    "Code.exe",
+    "inno_updater.exe",
+    "CodeHelper.exe",
+    "rg.exe",
+    "winpty-agent.exe",
+    "ssh.exe"
+  ],
+  "bypass": []
+}

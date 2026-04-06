@@ -1,0 +1,6 @@
+.gomodcache
+.vs
+.gocache
+dist
+data/config.json
+runtime/rules/custom

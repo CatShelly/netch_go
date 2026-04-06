@@ -1,0 +1,16 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Adobe Creative Cloud"
+  },
+  "description": "",
+  "handle": [
+    "Creative_Cloud_Set-Up.exe",
+    "Adobe CEF Helper.exe",
+    "Creative Cloud.exe",
+    "Setup.exe",
+    "Set-up.exe",
+    "HDHelper.exe"
+  ],
+  "bypass": []
+}

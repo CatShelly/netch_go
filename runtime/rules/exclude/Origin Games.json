@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Origin Games"
+  },
+  "description": "",
+  "handle": [
+    "\\\\OriginGames\\\\"
+  ],
+  "bypass": []
+}

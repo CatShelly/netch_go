@@ -1,0 +1,20 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Xshell 6"
+  },
+  "description": "",
+  "handle": [
+    "CrashSender.exe",
+    "installanchorservice.exe",
+    "LiveUpdate.exe",
+    "nsregister.exe",
+    "RealCmdModule.exe",
+    "SessionConverter.exe",
+    "Xagent.exe",
+    "Xshell.exe",
+    "XshellCore.exe",
+    "Xtransport.exe"
+  ],
+  "bypass": []
+}

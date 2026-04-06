@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Discord"
+  },
+  "description": "",
+  "handle": [
+    "Discord"
+  ],
+  "bypass": []
+}

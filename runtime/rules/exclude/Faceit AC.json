@@ -1,0 +1,12 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Faceit AC"
+  },
+  "description": "",
+  "handle": [
+    "faceitclient.exe",
+    "faceitservice.exe"
+  ],
+  "bypass": []
+}

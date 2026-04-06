@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Nexon Games"
+  },
+  "description": "",
+  "handle": [
+    "\\\\Nexon\\\\Library\\\\"
+  ],
+  "bypass": []
+}

@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Unity Asset Store for Unity"
+  },
+  "description": "",
+  "handle": [
+    "Unity.exe"
+  ],
+  "bypass": []
+}

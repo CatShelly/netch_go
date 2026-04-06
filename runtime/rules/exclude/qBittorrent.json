@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "qBittorrent"
+  },
+  "description": "",
+  "handle": [
+    "qbittorrent.exe"
+  ],
+  "bypass": []
+}

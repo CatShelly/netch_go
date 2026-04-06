@@ -1,0 +1,15 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Multi Theft Auto (MTA)"
+  },
+  "description": "",
+  "handle": [
+    "gta_sa.exe",
+    "CEFLauncher.exe",
+    "wow64_helper.exe",
+    "MTA Server.exe",
+    "Multi Theft Auto.exe"
+  ],
+  "bypass": []
+}

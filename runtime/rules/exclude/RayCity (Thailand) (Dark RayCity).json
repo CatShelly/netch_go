@@ -1,0 +1,12 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "RayCity (Thailand) (Dark RayCity)"
+  },
+  "description": "",
+  "handle": [
+    "\\\\Launcher.exe",
+    "Raycity.exe"
+  ],
+  "bypass": []
+}

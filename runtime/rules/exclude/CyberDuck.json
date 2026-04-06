@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "CyberDuck"
+  },
+  "description": "",
+  "handle": [
+    "Cyberduck.exe"
+  ],
+  "bypass": []
+}

@@ -1,0 +1,12 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Unity Hub"
+  },
+  "description": "",
+  "handle": [
+    "Unity Hub.exe",
+    "Unity.exe"
+  ],
+  "bypass": []
+}

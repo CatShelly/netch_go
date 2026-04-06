@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "NatTypeTester"
+  },
+  "description": "",
+  "handle": [
+    "NatTypeTester.exe"
+  ],
+  "bypass": []
+}

@@ -1,0 +1,14 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Geforce Experience"
+  },
+  "description": "",
+  "handle": [
+    "courgette.exe",
+    "NVIDIA GeForce Experience.exe",
+    "NVIDIA Notification.exe",
+    "NVIDIA Share.exe"
+  ],
+  "bypass": []
+}

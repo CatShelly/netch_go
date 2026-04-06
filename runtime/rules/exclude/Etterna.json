@@ -1,0 +1,11 @@
+{
+  "type": "ProcessMode",
+  "remark": {
+    "zh-CN": "Etterna"
+  },
+  "description": "",
+  "handle": [
+    "Etterna.exe"
+  ],
+  "bypass": []
+}
