@@ -1,5 +1,7 @@
 # Netch Go
 
+中文 | [English](README_EN.md)
+
 ## 声明
 
 本项目基于项目 [netchx/netch](https://github.com/netchx/netch) 修改而来。  
