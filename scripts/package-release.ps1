@@ -137,53 +137,6 @@ function Resolve-FirstExisting {
     throw "missing runtime dependency: $Name. candidates: $($Candidates -join ', ')"
 }
 
-function Write-DefaultConfig {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path
-    )
-
-    $cfg = [ordered]@{
-        servers = @()
-        customRuleSets = @()
-        selection = [ordered]@{
-            serverId = ''
-            ruleSetId = ''
-        }
-        proxy = [ordered]@{
-            filterLoopback = $false
-            filterIntranet = $true
-            filterParent = $false
-            filterICMP = $false
-            filterTCP = $true
-            filterUDP = $true
-            filterDNS = $true
-            handleOnlyDns = $false
-            dnsProxy = $false
-            remoteDns = '1.1.1.1:53'
-            icmpDelay = 10
-        }
-        dns = [ordered]@{
-            enabled = $false
-            listen = '127.0.0.1:53'
-            domesticUpstream = 'tcp://223.5.5.5:53'
-            proxyUpstream = 'tcp://1.1.1.1:53'
-            ruleFile = ''
-            applySystemDns = $false
-            managedAdapters = @()
-            restoreOnStop = $true
-        }
-        ui = [ordered]@{
-            autoImportLegacy = $true
-        }
-    }
-
-    New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
-    $json = $cfg | ConvertTo-Json -Depth 8
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
-}
-
 if ($Clean -and (Test-Path -LiteralPath $outputRoot)) {
     Remove-Item -LiteralPath $outputRoot -Recurse -Force
 }
@@ -285,8 +238,6 @@ foreach ($name in $requiredRuntimeFiles) {
 
 Copy-PackagedRules -SourceRoot (Join-Path $runtimeRoot 'rules') -TargetRoot (Join-Path $stageDir 'runtime\rules')
 
-Write-DefaultConfig -Path (Join-Path $stageDir 'data\config.json')
-
 $readme = @(
     'Netch Go Windows Package'
     ''
@@ -294,7 +245,6 @@ $readme = @(
     '- netch_go.exe'
     '- runtime\bin (Redirector.bin / nfapi.dll / nfdriver.sys)'
     '- runtime\rules'
-    '- data\config.json (default config)'
     ''
     'Usage:'
     '1. Right click netch_go.exe and choose "Run as administrator".'
