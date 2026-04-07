@@ -4,3 +4,4 @@
 /dist
 data/config.json
 runtime/rules/custom
+build/bin/netch_go
