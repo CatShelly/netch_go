@@ -67,6 +67,40 @@ button, input, textarea, select { font: inherit; }
   font-size: clamp(1.5rem, 2.4vw, 2.1rem);
   line-height: 1.1;
 }
+.brand-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.brand-gear {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  color: inherit;
+  cursor: pointer;
+  position: relative;
+  top: 0;
+  transform-origin: center center;
+}
+.gear-glyph {
+  display: inline-block;
+  line-height: 1;
+  font-family: "Segoe UI Symbol", "Segoe UI Emoji", sans-serif;
+  transform: none;
+}
+.brand-gear:hover {
+  color: inherit;
+  transform: rotate(8deg);
+}
 .hero-copy {
   max-width: 760px;
   margin: 8px 0 0;
@@ -80,9 +114,24 @@ button, input, textarea, select { font: inherit; }
   min-width: 320px;
   justify-items: end;
 }
+.hero-status-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
 .hero-actions .button-row { justify-content: flex-end; }
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.icon-symbol {
+  font-size: 1rem;
+  line-height: 1;
+}
 .session-badge {
-  justify-self: end;
   padding: 7px 12px;
   border-radius: 999px;
   font-weight: 700;
@@ -433,6 +482,31 @@ body.busy .page-shell {
   display: none !important;
 }
 
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: grid;
+  place-items: center;
+  background: rgba(21, 28, 35, 0.28);
+  backdrop-filter: blur(2px);
+}
+
+.settings-overlay[hidden] {
+  display: none !important;
+}
+
+.settings-card {
+  width: min(520px, calc(100vw - 24px));
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 250, 243, 0.98);
+  border: 1px solid rgba(34,48,68,0.14);
+  box-shadow: var(--shadow);
+}
+
 .busy-card {
   display: grid;
   place-items: center;
@@ -487,6 +561,7 @@ body.busy .page-shell {
     display: grid;
   }
   .hero-actions { min-width: 0; }
+  .settings-card { width: calc(100vw - 16px); }
   .quick-grid, .split-2, .check-grid, .adapter-grid, .asset-grid { grid-template-columns: 1fr; }
   .log-entry { grid-template-columns: 1fr; }
 }

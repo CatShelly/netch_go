@@ -31,6 +31,7 @@ function render() {
   const data = state.bootstrap;
   if (!data) return;
 
+  renderSettings(data);
   renderSession(data);
   renderSelectors(data);
   renderServerList(data);
@@ -175,6 +176,17 @@ function renderLogs(data) {
       <span>${escapeHtml(entry.message)}</span>
     </article>
   `).join('');
+}
+
+function closeActionFromBootstrap(data) {
+  const action = String(data?.config?.ui?.closeAction || '').trim().toLowerCase();
+  return action === 'minimize' ? 'minimize' : 'exit';
+}
+
+function renderSettings(data) {
+  const action = closeActionFromBootstrap(data);
+  setValue('closeActionExit', action !== 'minimize');
+  setValue('closeActionMinimize', action === 'minimize');
 }
 
 function selected(value) {
@@ -410,6 +422,20 @@ function resetRuleForm() {
   setRuleSaveStatus('');
 }
 
+function openSettings() {
+  const overlay = document.getElementById('settingsOverlay');
+  if (!overlay) return;
+  overlay.hidden = false;
+  document.body.classList.add('settings-open');
+}
+
+function closeSettings() {
+  const overlay = document.getElementById('settingsOverlay');
+  if (!overlay) return;
+  overlay.hidden = true;
+  document.body.classList.remove('settings-open');
+}
+
 function findServer(id) {
   return state.bootstrap?.config?.servers?.find(server => server.id === id);
 }
@@ -585,6 +611,27 @@ async function main() {
         renderDNSWatch(state.bootstrap);
       }
     });
+  });
+  document.getElementById('openSettingsBtn').addEventListener('click', openSettings);
+  document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
+  document.getElementById('cancelSettingsBtn').addEventListener('click', closeSettings);
+  document.getElementById('settingsOverlay').addEventListener('click', event => {
+    if (event.target?.id === 'settingsOverlay') {
+      closeSettings();
+    }
+  });
+  document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+    const action = document.getElementById('closeActionMinimize').checked ? 'minimize' : 'exit';
+    await withBusy('正在保存设置...', async () => {
+      state.bootstrap = await api().SaveCloseAction(action);
+      render();
+      closeSettings();
+    });
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      closeSettings();
+    }
   });
 
   if (window.runtime?.EventsOn) {

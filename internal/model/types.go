@@ -77,7 +77,8 @@ type DNSSettings struct {
 }
 
 type UISettings struct {
-	AutoImportLegacy bool `json:"autoImportLegacy"`
+	AutoImportLegacy bool   `json:"autoImportLegacy"`
+	CloseAction      string `json:"closeAction"`
 }
 
 type NetworkAdapter struct {
@@ -170,7 +171,10 @@ func DefaultConfig() AppConfig {
 			ManagedAdapters:  []string{},
 			RestoreOnStop:    true,
 		},
-		UI: UISettings{AutoImportLegacy: true},
+		UI: UISettings{
+			AutoImportLegacy: true,
+			CloseAction:      "exit",
+		},
 	}
 }
 
@@ -192,6 +196,14 @@ func (c *AppConfig) Normalize() {
 	}
 	for i := range c.CustomRuleSets {
 		c.CustomRuleSets[i].Normalize()
+	}
+	switch strings.ToLower(strings.TrimSpace(c.UI.CloseAction)) {
+	case "minimize", "exit":
+		c.UI.CloseAction = strings.ToLower(strings.TrimSpace(c.UI.CloseAction))
+	case "", "ask":
+		c.UI.CloseAction = defaults.UI.CloseAction
+	default:
+		c.UI.CloseAction = defaults.UI.CloseAction
 	}
 }
 

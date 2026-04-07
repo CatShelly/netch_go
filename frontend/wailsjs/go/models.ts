@@ -2,6 +2,7 @@ export namespace model {
 	
 	export class UISettings {
 	    autoImportLegacy: boolean;
+	    closeAction: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UISettings(source);
@@ -10,6 +11,7 @@ export namespace model {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.autoImportLegacy = source["autoImportLegacy"];
+	        this.closeAction = source["closeAction"];
 	    }
 	}
 	export class DNSSettings {

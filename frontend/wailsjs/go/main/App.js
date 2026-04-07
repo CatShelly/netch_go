@@ -34,6 +34,10 @@ export function PrepareRuntimeAssets() {
   return window['go']['main']['App']['PrepareRuntimeAssets']();
 }
 
+export function SaveCloseAction(arg1) {
+  return window['go']['main']['App']['SaveCloseAction'](arg1);
+}
+
 export function SaveDNSSettings(arg1) {
   return window['go']['main']['App']['SaveDNSSettings'](arg1);
 }

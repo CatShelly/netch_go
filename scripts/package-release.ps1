@@ -246,7 +246,6 @@ $resolvedRuntime = @{
         (Join-Path $repoRoot 'Redirector\static\nfdriver.sys')
     )
 }
-
 if (-not (Get-Command wails -ErrorAction SilentlyContinue)) {
     throw 'wails CLI was not found in PATH. Please install Wails CLI or run in an environment where `wails` is available.'
 }
@@ -254,7 +253,7 @@ if (-not (Get-Command wails -ErrorAction SilentlyContinue)) {
 Write-Host "Building executable with Wails ($exeName)..."
 Push-Location $repoRoot
 try {
-    $wailsArgs = @('build', '-clean', '-nopackage', '-s', '-trimpath', '-o', $PackageName)
+    $wailsArgs = @('build', '-clean', '-s', '-trimpath', '-o', $PackageName)
     if ($Configuration -eq 'Debug') {
         $wailsArgs += '-debug'
     }

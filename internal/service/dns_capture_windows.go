@@ -4,7 +4,7 @@ package service
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -23,13 +24,34 @@ import (
 
 const (
 	dnsClientOperationalLog = "Microsoft-Windows-DNS-Client/Operational"
-	dnsCapturePollInterval  = 1200 * time.Millisecond
+	dnsClientEventQuery     = "*"
 	dnsCaptureProcessTick   = 2 * time.Second
-	dnsCapturePollBatch     = 2048
 	dnsCaptureMaxDomains    = 200
-	dnsCaptureBackfillSpan  = 20000
 	dnsCapturePIDHoldTTL    = 90 * time.Second
 )
+
+const (
+	evtSubscribeToFutureEvents = 1
+	evtRenderEventXML          = 1
+	evtSubscribeActionError    = 0
+	evtSubscribeActionDeliver  = 1
+)
+
+var (
+	wevtapiDLL      = windows.NewLazySystemDLL("wevtapi.dll")
+	procEvtSubscribe = wevtapiDLL.NewProc("EvtSubscribe")
+	procEvtRender    = wevtapiDLL.NewProc("EvtRender")
+	procEvtClose     = wevtapiDLL.NewProc("EvtClose")
+	evtSubscribeCB   = syscall.NewCallback(evtSubscribeCallback)
+
+	dnsSubscribeSeq   uint64
+	dnsSubscribeSinks sync.Map // map[uintptr]*dnsSubscribeSink
+)
+
+type dnsSubscribeSink struct {
+	rows chan dnsEventRow
+	errs chan error
+}
 
 type dnsEventRow struct {
 	RecordID  uint64 `json:"recordId"`
@@ -119,7 +141,6 @@ type DNSCaptureMonitor struct {
 	message        string
 	domains        []string
 	domainSet      map[string]struct{}
-	lastRecordID   uint64
 	cancel         context.CancelFunc
 
 	matcher      dnsRuleMatcher
@@ -206,15 +227,6 @@ func (m *DNSCaptureMonitor) SetEnabled(enabled bool, sessionRunning bool, ruleSe
 		return m.failEnable(fmt.Sprintf("执行 ipconfig /flushdns 失败: %v", err))
 	}
 
-	latestRecordID, err := queryLatestRecordID()
-	if err != nil {
-		return m.failEnable(fmt.Sprintf("读取 DNS Client ETW 游标失败: %v", err))
-	}
-	startRecordID := uint64(0)
-	if latestRecordID > dnsCaptureBackfillSpan {
-		startRecordID = latestRecordID - dnsCaptureBackfillSpan
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	m.mu.Lock()
@@ -227,8 +239,7 @@ func (m *DNSCaptureMonitor) SetEnabled(enabled bool, sessionRunning bool, ruleSe
 	m.enabled = true
 	m.capturing = true
 	m.channelEnabled = true
-	m.message = "DNS Client ETW 抓取已开启，正在按规则匹配进程过滤域名"
-	m.lastRecordID = startRecordID
+	m.message = "DNS Client ETW 抓取已开启（原生订阅），正在按规则匹配进程过滤域名"
 	m.cancel = cancel
 	m.matcher = matcher
 	m.domains = []string{}
@@ -238,12 +249,10 @@ func (m *DNSCaptureMonitor) SetEnabled(enabled bool, sessionRunning bool, ruleSe
 	status := m.statusLocked()
 	m.mu.Unlock()
 
-	m.logf("info", fmt.Sprintf("DNS Client ETW 抓取已开启：规则集=%s，已执行 flushdns，回溯窗口 RID>%d（latest=%d）", ruleSet.Name, startRecordID, latestRecordID))
-	fmt.Printf("[DNSWatch] enabled: ruleSet=%s startRID>%d latest=%d\n", ruleSet.Name, startRecordID, latestRecordID)
+	m.logf("info", fmt.Sprintf("DNS Client ETW 抓取已开启：规则集=%s，已执行 flushdns，使用原生订阅模式", ruleSet.Name))
 
-	go m.pollOnce()
 	go m.processScanOnce()
-	go m.pollLoop(ctx)
+	go m.subscribeLoop(ctx)
 	go m.processScanLoop(ctx)
 
 	return status, nil
@@ -259,7 +268,6 @@ func (m *DNSCaptureMonitor) failEnable(message string) (model.DNSCaptureState, e
 	status := m.statusLocked()
 	m.mu.Unlock()
 	m.logf("warn", message)
-	fmt.Printf("[DNSWatch] enable failed: %s\n", message)
 	return status, errors.New(message)
 }
 
@@ -287,20 +295,6 @@ func (m *DNSCaptureMonitor) statusLocked() model.DNSCaptureState {
 	}
 }
 
-func (m *DNSCaptureMonitor) pollLoop(ctx context.Context) {
-	ticker := time.NewTicker(dnsCapturePollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			m.pollOnce()
-		}
-	}
-}
-
 func (m *DNSCaptureMonitor) processScanLoop(ctx context.Context) {
 	ticker := time.NewTicker(dnsCaptureProcessTick)
 	defer ticker.Stop()
@@ -318,21 +312,13 @@ func (m *DNSCaptureMonitor) processScanLoop(ctx context.Context) {
 func (m *DNSCaptureMonitor) processScanOnce() {
 	m.mu.Lock()
 	matcher := m.matcher
-	known := make(map[uint32]pidSeen, len(m.activePIDs))
-	for pid, info := range m.activePIDs {
-		known[pid] = info
-	}
 	m.mu.Unlock()
 
 	matchedNow := scanMatchedProcessHints(matcher)
 
-	newLines := []string{}
 	now := time.Now()
 	m.mu.Lock()
 	for pid, hint := range matchedNow {
-		if old, exists := known[pid]; !exists || !strings.EqualFold(old.name, hint) {
-			newLines = append(newLines, fmt.Sprintf("[DNSWatch][PID] matched pid=%d process=%s", pid, hint))
-		}
 		m.activePIDs[pid] = pidSeen{name: hint, seenAt: now}
 	}
 	for pid, info := range m.activePIDs {
@@ -341,82 +327,54 @@ func (m *DNSCaptureMonitor) processScanOnce() {
 		}
 	}
 	m.mu.Unlock()
+}
 
-	for _, line := range newLines {
-		fmt.Println(line)
+func (m *DNSCaptureMonitor) subscribeLoop(ctx context.Context) {
+	err := subscribeDNSClientEvents(ctx, func(row dnsEventRow) {
+		m.handleEventRow(row)
+	})
+	if err == nil {
+		return
+	}
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		m.logf("warn", fmt.Sprintf("DNS Client ETW 原生订阅异常: %v", err))
 	}
 }
 
-func (m *DNSCaptureMonitor) pollOnce() {
-	m.mu.Lock()
-	minRecordID := m.lastRecordID
-	m.mu.Unlock()
-
-	rows, err := queryDNSRowsAfter(minRecordID)
-	if err != nil {
-		m.logf("warn", fmt.Sprintf("读取 DNS Client ETW 事件失败: %v", err))
-		fmt.Printf("[DNSWatch] ETW query error: %v\n", err)
-		return
-	}
-	if len(rows) == 0 {
+func (m *DNSCaptureMonitor) handleEventRow(row dnsEventRow) {
+	pid := row.ClientPID
+	if pid == 0 {
 		return
 	}
 
-	type domainHit struct {
-		domain  string
-		pid     uint32
-		process string
-	}
-	newDomains := make([]domainHit, 0, len(rows))
-
 	m.mu.Lock()
-	for _, row := range rows {
-		if row.RecordID > m.lastRecordID {
-			m.lastRecordID = row.RecordID
+	matched := false
+	processTexts := []string{}
+	if hint, ok := m.activePIDs[pid]; ok {
+		matched = true
+		processTexts = []string{hint.name}
+	} else {
+		matched, processTexts = m.isMatchedClientPIDLocked(pid)
+		if matched && len(processTexts) > 0 {
+			m.activePIDs[pid] = pidSeen{name: processTexts[0], seenAt: time.Now()}
 		}
-
-		pid := row.ClientPID
-		if pid == 0 {
-			continue
-		}
-
-		matched := false
-		processTexts := []string{}
-		if hint, ok := m.activePIDs[pid]; ok {
-			matched = true
-			processTexts = []string{hint.name}
-		} else {
-			matched, processTexts = m.isMatchedClientPIDLocked(pid)
-			if matched && len(processTexts) > 0 {
-				m.activePIDs[pid] = pidSeen{name: processTexts[0], seenAt: time.Now()}
-			}
-		}
-		if !matched {
-			continue
-		}
-
-		domain := normalizeDomain(row.QueryName)
-		if domain == "" {
-			continue
-		}
-		processHint := ""
-		if len(processTexts) > 0 {
-			processHint = processTexts[0]
-		}
-		newDomains = append(newDomains, domainHit{
-			domain:  domain,
-			pid:     pid,
-			process: processHint,
-		})
 	}
 	m.mu.Unlock()
 
-	for _, hit := range newDomains {
-		m.ingestDomains(hit.pid, hit.process, []string{hit.domain})
+	if !matched {
+		return
 	}
+	domain := normalizeDomain(row.QueryName)
+	if domain == "" {
+		return
+	}
+	m.ingestDomains([]string{domain})
 }
 
-func (m *DNSCaptureMonitor) ingestDomains(pid uint32, processHint string, domains []string) {
+func (m *DNSCaptureMonitor) ingestDomains(domains []string) {
 	added := []string{}
 
 	m.mu.Lock()
@@ -441,11 +399,6 @@ func (m *DNSCaptureMonitor) ingestDomains(pid uint32, processHint string, domain
 
 	for _, domain := range added {
 		m.onDomain(domain)
-		if processHint != "" {
-			m.logf("info", fmt.Sprintf("[DNSWatch][DOMAIN] %s (pid=%d, process=%s)", domain, pid, processHint))
-		} else {
-			m.logf("info", fmt.Sprintf("[DNSWatch][DOMAIN] %s (pid=%d)", domain, pid))
-		}
 	}
 }
 
@@ -615,91 +568,240 @@ func isDNSClientChannelEnabled() (bool, error) {
 }
 
 func flushDNSCache() error {
-	output, err := exec.Command("ipconfig", "/flushdns").CombinedOutput()
+	cmd := exec.Command("ipconfig", "/flushdns")
+	hideCommandWindow(cmd)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }
 
-func queryLatestRecordID() (uint64, error) {
-	out, err := runPowerShell(
-		"$e = Get-WinEvent -LogName '" + dnsClientOperationalLog + "' -MaxEvents 1 -ErrorAction SilentlyContinue;" +
-			"if ($null -eq $e) { '0' } else { [string]$e.RecordId }",
+func subscribeDNSClientEvents(ctx context.Context, onRow func(dnsEventRow)) error {
+	if onRow == nil {
+		return fmt.Errorf("dns event sink is nil")
+	}
+
+	channel, err := syscall.UTF16PtrFromString(dnsClientOperationalLog)
+	if err != nil {
+		return fmt.Errorf("invalid event log name: %w", err)
+	}
+	query, err := syscall.UTF16PtrFromString(dnsClientEventQuery)
+	if err != nil {
+		return fmt.Errorf("invalid event query: %w", err)
+	}
+
+	sink := &dnsSubscribeSink{
+		rows: make(chan dnsEventRow, 256),
+		errs: make(chan error, 8),
+	}
+	ctxID := registerDNSSubscribeSink(sink)
+	defer unregisterDNSSubscribeSink(ctxID)
+
+	subscription, _, callErr := procEvtSubscribe.Call(
+		0,
+		0,
+		uintptr(unsafe.Pointer(channel)),
+		uintptr(unsafe.Pointer(query)),
+		0,
+		ctxID,
+		evtSubscribeCB,
+		uintptr(evtSubscribeToFutureEvents),
 	)
-	if err != nil {
-		return 0, err
+	if subscription == 0 {
+		return fmt.Errorf("EvtSubscribe failed: %w", unwrapCallErr(callErr))
 	}
-	value := strings.TrimSpace(out)
-	if value == "" {
-		return 0, nil
-	}
-	recordID, err := strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse record id failed: %w", err)
-	}
-	return recordID, nil
-}
+	defer evtCloseHandle(subscription)
 
-func queryDNSRowsAfter(minRecordID uint64) ([]dnsEventRow, error) {
-	script := fmt.Sprintf(`
-$min = [UInt64]%d
-$events = Get-WinEvent -LogName '%s' -MaxEvents %d -ErrorAction SilentlyContinue
-$events = @($events | Sort-Object RecordId)
-$rows = @()
-foreach($e in @($events)){
-  try{
-    [UInt64]$rid = [UInt64]$e.RecordId
-    if($rid -le $min){ continue }
-    $xml = [xml]$e.ToXml()
-    $query = $null
-    $clientPidVal = [UInt32]0
-    foreach($d in @($xml.Event.EventData.Data)){
-      if($d.Name -eq 'QueryName'){ $query = [string]$d.'#text' }
-      if($d.Name -eq 'ClientPID'){
-        [UInt32]$tmp = 0
-        if([UInt32]::TryParse([string]$d.'#text', [ref]$tmp)){ $clientPidVal = $tmp }
-      }
-    }
-    if([string]::IsNullOrWhiteSpace($query)){ continue }
-    if($clientPidVal -le 0){ continue }
-    $rows += [pscustomobject]@{
-      recordId=$rid
-      eventId=[UInt32]$e.Id
-      queryName=$query
-      clientPid=$clientPidVal
-    }
-  } catch {}
-}
-@($rows) | ConvertTo-Json -Compress
-`, minRecordID, dnsClientOperationalLog, dnsCapturePollBatch)
-
-	out, err := runPowerShell(script)
-	if err != nil {
-		return nil, err
-	}
-	return decodeDNSRows(out)
-}
-
-func decodeDNSRows(raw string) ([]dnsEventRow, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" || trimmed == "null" {
-		return []dnsEventRow{}, nil
-	}
-
-	if strings.HasPrefix(trimmed, "{") {
-		var row dnsEventRow
-		if err := json.Unmarshal([]byte(trimmed), &row); err != nil {
-			return nil, err
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case row := <-sink.rows:
+			onRow(row)
+		case subErr := <-sink.errs:
+			return subErr
 		}
-		return []dnsEventRow{row}, nil
+	}
+}
+
+func evtRenderXML(eventHandle uintptr) (string, error) {
+	var bufferUsed uint32
+	var propertyCount uint32
+
+	r1, _, callErr := procEvtRender.Call(
+		0,
+		eventHandle,
+		uintptr(evtRenderEventXML),
+		0,
+		0,
+		uintptr(unsafe.Pointer(&bufferUsed)),
+		uintptr(unsafe.Pointer(&propertyCount)),
+	)
+	if r1 == 0 {
+		errno := unwrapCallErr(callErr)
+		if !errors.Is(errno, windows.ERROR_INSUFFICIENT_BUFFER) {
+			return "", fmt.Errorf("EvtRender(size) failed: %w", errno)
+		}
+	}
+	if bufferUsed == 0 {
+		return "", nil
 	}
 
-	var rows []dnsEventRow
-	if err := json.Unmarshal([]byte(trimmed), &rows); err != nil {
-		return nil, err
+	buffer := make([]uint16, (bufferUsed+1)/2)
+	r1, _, callErr = procEvtRender.Call(
+		0,
+		eventHandle,
+		uintptr(evtRenderEventXML),
+		uintptr(bufferUsed),
+		uintptr(unsafe.Pointer(&buffer[0])),
+		uintptr(unsafe.Pointer(&bufferUsed)),
+		uintptr(unsafe.Pointer(&propertyCount)),
+	)
+	if r1 == 0 {
+		return "", fmt.Errorf("EvtRender(xml) failed: %w", unwrapCallErr(callErr))
 	}
-	return rows, nil
+	return syscall.UTF16ToString(buffer), nil
+}
+
+func registerDNSSubscribeSink(sink *dnsSubscribeSink) uintptr {
+	if sink == nil {
+		return 0
+	}
+	id := uintptr(atomic.AddUint64(&dnsSubscribeSeq, 1))
+	dnsSubscribeSinks.Store(id, sink)
+	return id
+}
+
+func unregisterDNSSubscribeSink(id uintptr) {
+	if id == 0 {
+		return
+	}
+	dnsSubscribeSinks.Delete(id)
+}
+
+func evtSubscribeCallback(action uintptr, userContext uintptr, event uintptr) uintptr {
+	value, ok := dnsSubscribeSinks.Load(userContext)
+	if !ok {
+		return 0
+	}
+	sink, ok := value.(*dnsSubscribeSink)
+	if !ok || sink == nil {
+		return 0
+	}
+
+	switch action {
+	case evtSubscribeActionDeliver:
+		defer evtCloseHandle(event)
+		xmlText, err := evtRenderXML(event)
+		if err != nil {
+			return 0
+		}
+		row, ok := parseDNSEventXML(xmlText)
+		if !ok {
+			return 0
+		}
+		select {
+		case sink.rows <- row:
+		default:
+		}
+	case evtSubscribeActionError:
+		if event != 0 {
+			err := fmt.Errorf("EvtSubscribe callback error: %w", syscall.Errno(event))
+			select {
+			case sink.errs <- err:
+			default:
+			}
+		}
+	}
+
+	return 0
+}
+
+func evtCloseHandle(handle uintptr) {
+	if handle == 0 {
+		return
+	}
+	procEvtClose.Call(handle)
+}
+
+type dnsEventXML struct {
+	System struct {
+		EventID       uint32 `xml:"EventID"`
+		EventRecordID uint64 `xml:"EventRecordID"`
+		Execution     struct {
+			ProcessID uint32 `xml:"ProcessID,attr"`
+		} `xml:"Execution"`
+	} `xml:"System"`
+	EventData struct {
+		Data []dnsEventXMLData `xml:"Data"`
+	} `xml:"EventData"`
+}
+
+type dnsEventXMLData struct {
+	Name  string `xml:"Name,attr"`
+	Value string `xml:",chardata"`
+}
+
+func parseDNSEventXML(raw string) (dnsEventRow, bool) {
+	var event dnsEventXML
+	if err := xml.Unmarshal([]byte(raw), &event); err != nil {
+		return dnsEventRow{}, false
+	}
+
+	row := dnsEventRow{
+		RecordID: event.System.EventRecordID,
+		EventID:  event.System.EventID,
+	}
+	for _, data := range event.EventData.Data {
+		name := strings.TrimSpace(data.Name)
+		value := strings.TrimSpace(data.Value)
+		switch {
+		case strings.EqualFold(name, "QueryName"):
+			row.QueryName = value
+		case strings.EqualFold(name, "ClientPID"),
+			strings.EqualFold(name, "ClientPid"),
+			strings.EqualFold(name, "ClientProcessId"),
+			strings.EqualFold(name, "ProcessID"),
+			strings.EqualFold(name, "ProcessId"):
+			if pid, ok := parseEventPID(value); ok {
+				row.ClientPID = pid
+			}
+		}
+	}
+	if row.ClientPID == 0 && event.System.Execution.ProcessID != 0 {
+		row.ClientPID = event.System.Execution.ProcessID
+	}
+	if strings.TrimSpace(row.QueryName) == "" || row.ClientPID == 0 {
+		return dnsEventRow{}, false
+	}
+	return row, true
+}
+
+func parseEventPID(value string) (uint32, bool) {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return 0, false
+	}
+	v = strings.TrimSuffix(v, ";")
+	pid, err := strconv.ParseUint(v, 0, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(pid), true
+}
+
+func unwrapCallErr(err error) error {
+	if err == nil {
+		return syscall.Errno(0)
+	}
+	if errno, ok := err.(syscall.Errno); ok {
+		if errno == 0 {
+			return syscall.Errno(0)
+		}
+		return errno
+	}
+	return err
 }
 
 func runPowerShell(script string) (string, error) {
@@ -717,6 +819,7 @@ func runPowerShell(script string) (string, error) {
 		"-Command",
 		script,
 	)
+	hideCommandWindow(cmd)
 
 	output, err := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(output))
@@ -730,4 +833,14 @@ func runPowerShell(script string) (string, error) {
 		return "", fmt.Errorf("%w: %s", err, trimmed)
 	}
 	return trimmed, nil
+}
+
+func hideCommandWindow(cmd *exec.Cmd) {
+	if cmd == nil {
+		return
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NO_WINDOW,
+	}
 }

@@ -19,18 +19,19 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:            "Netch Go",
-		Width:            1200,
-		Height:           760,
-		MinWidth:         960,
-		MinHeight:        620,
-		BackgroundColour: &options.RGBA{R: 244, G: 238, B: 228, A: 1},
-		AssetServer:      &assetserver.Options{Assets: assets},
-		OnStartup:        app.Startup,
-		OnDomReady:       app.DomReady,
-		OnBeforeClose:    app.BeforeClose,
-		OnShutdown:       app.Shutdown,
-		Bind:             []interface{}{app},
+		Title:             "Netch Go",
+		Width:             1200,
+		Height:            760,
+		MinWidth:          960,
+		MinHeight:         620,
+		HideWindowOnClose: false,
+		BackgroundColour:  &options.RGBA{R: 244, G: 238, B: 228, A: 1},
+		AssetServer:       &assetserver.Options{Assets: assets},
+		OnStartup:         app.Startup,
+		OnDomReady:        app.DomReady,
+		OnBeforeClose:     app.BeforeClose,
+		OnShutdown:        app.Shutdown,
+		Bind:              []interface{}{app},
 	})
 	if err != nil {
 		fmt.Println("启动失败:", err.Error())

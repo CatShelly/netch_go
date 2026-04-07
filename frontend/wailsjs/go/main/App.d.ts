@@ -18,6 +18,8 @@ export function OpenRuntimeDir():Promise<void>;
 
 export function PrepareRuntimeAssets():Promise<model.BootstrapState>;
 
+export function SaveCloseAction(arg1:string):Promise<model.BootstrapState>;
+
 export function SaveDNSSettings(arg1:model.DNSSettings):Promise<model.BootstrapState>;
 
 export function SaveProxyOptions(arg1:model.ProxyOptions):Promise<model.BootstrapState>;

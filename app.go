@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -35,6 +36,23 @@ type App struct {
 	mu     sync.Mutex
 	config model.AppConfig
 	logs   []model.LogEntry
+
+	tray       trayController
+	forceExit  bool
+	trayHidden bool
+
+	exitWatchdogOnce sync.Once
+}
+
+const (
+	closeActionMinimize = "minimize"
+	closeActionExit     = "exit"
+)
+
+type trayController interface {
+	Start() error
+	Stop()
+	IsReady() bool
 }
 
 func NewApp() (*App, error) {
@@ -74,6 +92,7 @@ func NewApp() (*App, error) {
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.startTray()
 	a.pushLog("info", "Wails UI 已连接")
 	if !windows.IsElevated() {
 		a.pushLog("warn", "当前进程不是管理员权限，强制代理启动会失败。请用管理员终端运行 wails dev 或运行构建后的 exe。")
@@ -85,14 +104,43 @@ func (a *App) DomReady(ctx context.Context) {
 }
 
 func (a *App) BeforeClose(ctx context.Context) bool {
-	a.stopSessionForExit("窗口关闭，正在自动停止强制代理会话")
-	a.stopDNSWatchForExit()
+	if a.consumeForceExit() {
+		a.prepareExit()
+		return false
+	}
+
+	action := a.getCloseAction()
+	if action == closeActionMinimize {
+		return a.closeToTray()
+	}
+	a.prepareExit()
+	return false
+}
+
+func (a *App) closeToTray() bool {
+	if !a.trayReady() {
+		a.startTray()
+	}
+	if !a.trayReady() {
+		a.pushLog("warn", "托盘初始化失败，无法最小化到托盘，已按直接退出处理")
+		a.prepareExit()
+		return false
+	}
+	a.pushLog("info", "窗口已最小化到托盘")
+	if a.ctx != nil {
+		wailsruntime.WindowHide(a.ctx)
+		a.setTrayHidden(true)
+		return true
+	}
+	// If window context is unavailable, do not block close forever.
+	a.prepareExit()
 	return false
 }
 
 func (a *App) Shutdown(ctx context.Context) {
 	a.stopSessionForExit("程序退出，正在清理强制代理会话")
 	a.stopDNSWatchForExit()
+	a.stopTray()
 }
 
 func (a *App) GetBootstrap() (model.BootstrapState, error) {
@@ -270,6 +318,19 @@ func (a *App) SaveSelection(selection model.SelectionState) (model.BootstrapStat
 		return model.BootstrapState{}, err
 	}
 	a.mu.Unlock()
+	return a.bootstrapState()
+}
+
+func (a *App) SaveCloseAction(action string) (model.BootstrapState, error) {
+	finalAction, err := a.setCloseAction(action)
+	if err != nil {
+		return model.BootstrapState{}, err
+	}
+	if finalAction == closeActionMinimize {
+		a.pushLog("info", "关闭行为已更新: 最小化到托盘")
+	} else {
+		a.pushLog("info", "关闭行为已更新: 直接退出")
+	}
 	return a.bootstrapState()
 }
 
@@ -468,6 +529,141 @@ func (a *App) stopDNSWatchForExit() {
 		return
 	}
 	_, _ = a.dnsWatch.SetEnabled(false, false, model.RuleSet{})
+}
+
+func (a *App) prepareExit() {
+	a.stopSessionForExit("窗口关闭，正在自动停止强制代理会话")
+	a.stopDNSWatchForExit()
+	a.armExitWatchdog()
+}
+
+func (a *App) startTray() {
+	tray := newTrayController(a)
+	if tray == nil {
+		return
+	}
+	if err := tray.Start(); err != nil {
+		a.pushLog("warn", "托盘初始化失败: "+err.Error())
+		return
+	}
+	a.mu.Lock()
+	old := a.tray
+	a.tray = tray
+	a.mu.Unlock()
+	if old != nil && old != tray {
+		old.Stop()
+	}
+}
+
+func (a *App) stopTray() {
+	a.mu.Lock()
+	tray := a.tray
+	a.tray = nil
+	a.mu.Unlock()
+	if tray != nil {
+		tray.Stop()
+	}
+}
+
+func (a *App) trayReady() bool {
+	a.mu.Lock()
+	tray := a.tray
+	a.mu.Unlock()
+	if tray == nil {
+		return false
+	}
+	return tray.IsReady()
+}
+
+func (a *App) showWindowFromTray() {
+	if a.ctx == nil {
+		return
+	}
+	wailsruntime.WindowUnminimise(a.ctx)
+	wailsruntime.WindowShow(a.ctx)
+	a.setTrayHidden(false)
+}
+
+func (a *App) hideWindowFromTray() {
+	if a.ctx == nil {
+		return
+	}
+	wailsruntime.WindowHide(a.ctx)
+	a.setTrayHidden(true)
+}
+
+func (a *App) requestQuitFromTray() {
+	a.mu.Lock()
+	a.forceExit = true
+	ctx := a.ctx
+	a.mu.Unlock()
+	if ctx != nil {
+		wailsruntime.Quit(ctx)
+		return
+	}
+	a.prepareExit()
+}
+
+func (a *App) consumeForceExit() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.forceExit {
+		return false
+	}
+	a.forceExit = false
+	return true
+}
+
+func (a *App) setTrayHidden(hidden bool) {
+	a.mu.Lock()
+	a.trayHidden = hidden
+	a.mu.Unlock()
+}
+
+func (a *App) isTrayHidden() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.trayHidden
+}
+
+func (a *App) getCloseAction() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return normalizeCloseAction(a.config.UI.CloseAction)
+}
+
+func normalizeCloseAction(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case closeActionMinimize:
+		return closeActionMinimize
+	case "ask", "":
+		return closeActionExit
+	default:
+		return closeActionExit
+	}
+}
+
+func (a *App) setCloseAction(action string) (string, error) {
+	action = normalizeCloseAction(action)
+
+	a.mu.Lock()
+	a.config.UI.CloseAction = action
+	cfg := a.config
+	a.mu.Unlock()
+
+	if err := a.store.Save(cfg); err != nil {
+		return action, err
+	}
+	return action, nil
+}
+
+func (a *App) armExitWatchdog() {
+	a.exitWatchdogOnce.Do(func() {
+		go func() {
+			time.Sleep(3 * time.Second)
+			os.Exit(0)
+		}()
+	})
 }
 
 func scanExecutableRules(root string, maxCount int) ([]string, error) {
